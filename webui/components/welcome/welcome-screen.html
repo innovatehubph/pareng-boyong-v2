@@ -10,15 +10,15 @@
     <div x-data x-show="$store.welcomeStore && $store.welcomeStore.isVisible">
         <template x-if="$store.welcomeStore">
             <div x-data="$store.welcomeStore" class="welcome-container">
-                <!-- Pareng Boyong Logo -->
+                <!-- InnovateHub Logo -->
                 <div class="welcome-logo-container">
-                    <img src="./public/darkSymbol.svg" alt="Pareng Boyong Logo" class="welcome-logo" />
+                    <img src="./public/innovatehub-logo.png" alt="InnovateHub - Pareng Boyong" class="welcome-logo" />
                 </div>
 
                 <!-- Welcome Title -->
                 <h1 class="welcome-title">Welcome to Pareng Boyong</h1>
                 <p class="welcome-subtitle">
-                    Start a new conversation or explore the features below.
+                    Your Filipino AI Assistant powered by InnovateHub
                 </p>
 
                 <!-- Action Cards -->
@@ -52,20 +52,6 @@
                             Configure Pareng Boyong
                         </p>
                     </div>
-                    <div class="welcome-action-card" @click="executeAction('website')">
-                        <span class="material-symbols-outlined welcome-action-icon">language</span>
-                        <h3 class="welcome-action-title">Visit Website</h3>
-                        <p class="welcome-action-description">
-                            Learn more about Pareng Boyong
-                        </p>
-                    </div>
-                    <div class="welcome-action-card" @click="executeAction('github')">
-                        <span class="material-symbols-outlined welcome-action-icon">code</span>
-                        <h3 class="welcome-action-title">Visit GitHub</h3>
-                        <p class="welcome-action-description">
-                            View source code and documentation
-                        </p>
-                    </div>
                 </div>
             </div>
         </template>
@@ -93,17 +79,10 @@
         }
 
         .welcome-logo {
-            width: 7rem;
-            height: 7rem;
-        }
-
-        /* Themes adjustments for logo */
-        .light-mode .welcome-logo {
-            filter: invert(0.5);
-        }
-
-        .dark-mode .welcome-logo {
-            filter: invert(0.8);
+            width: 10rem;
+            height: auto;
+            max-height: 10rem;
+            object-fit: contain;
         }
 
         .welcome-title {
@@ -127,9 +106,9 @@
 
         .welcome-actions {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 1.2rem;
-            max-width: 520px;
+            max-width: 420px;
             width: 100%;
             margin: 1.5rem 0;
         }
@@ -197,8 +176,8 @@
             }
 
             .welcome-logo {
-                width: 5rem;
-                height: 5rem;
+                width: 8rem;
+                height: auto;
             }
 
             .welcome-logo-container {
