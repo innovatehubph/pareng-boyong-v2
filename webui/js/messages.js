@@ -201,8 +201,19 @@ export function _drawMessage(
       }
 
       let processedContent = content;
+      // Convert media tags
       processedContent = convertImageTags(processedContent);
+      processedContent = convertAudioTags(processedContent);
+      processedContent = convertVideoTags(processedContent);
+      // Convert file paths
       processedContent = convertImgFilePaths(processedContent);
+      processedContent = convertAudioFilePaths(processedContent);
+      processedContent = convertVideoFilePaths(processedContent);
+      // Convert HTML/React components (before markdown to preserve tags)
+      processedContent = convertHtmlSandbox(processedContent);
+      processedContent = convertReactComponent(processedContent);
+      processedContent = convertPrerenderedHtml(processedContent);
+      // Parse markdown
       processedContent = marked.parse(processedContent, { breaks: true });
       processedContent = convertPathsToLinks(processedContent);
       processedContent = addBlankTargetsToLinks(processedContent);
@@ -910,17 +921,269 @@ function convertImageTags(content) {
   return updatedContent;
 }
 
+function convertAudioTags(content) {
+  // Regular expression to match <audio> tags and extract base64 content
+  const audioTagRegex = /<audio>(.*?)<\/audio>/gs;
+
+  // Replace <audio> tags with HTML5 audio players
+  const updatedContent = content.replace(
+    audioTagRegex,
+    (match, base64Content) => {
+      return `<audio controls style="max-width: 100%; margin: 8px 0;"><source src="data:audio/mpeg;base64,${base64Content}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+    }
+  );
+
+  return updatedContent;
+}
+
+function convertVideoTags(content) {
+  // Regular expression to match <video> tags and extract base64 content
+  const videoTagRegex = /<video>(.*?)<\/video>/gs;
+
+  // Replace <video> tags with HTML5 video players
+  const updatedContent = content.replace(
+    videoTagRegex,
+    (match, base64Content) => {
+      return `<video controls style="max-width: 100%; max-height: 400px; margin: 8px 0; border-radius: 8px;"><source src="data:video/mp4;base64,${base64Content}" type="video/mp4">Your browser does not support the video element.</video>`;
+    }
+  );
+
+  return updatedContent;
+}
+
+function convertHtmlSandbox(content) {
+  // Match <html-sandbox>...</html-sandbox> tags
+  const htmlSandboxRegex = /<html-sandbox>([\s\S]*?)<\/html-sandbox>/gi;
+  
+  return content.replace(htmlSandboxRegex, (match, htmlContent) => {
+    // Decode HTML entities if content was escaped
+    const decodedHtml = htmlContent
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    
+    // Create sandboxed iframe with the HTML content
+    const iframeId = 'sandbox-' + Math.random().toString(36).substr(2, 9);
+    const sandboxHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 12px;
+            background: transparent;
+            color: #e0e0e0;
+          }
+          button {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+          }
+          button:hover { background: #5a5a7a; }
+          input, select, textarea {
+            background: #2a2a4a;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            padding: 8px;
+            border-radius: 4px;
+          }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #4a4a6a; padding: 8px; text-align: left; }
+          th { background: #3a3a5a; }
+          a { color: #7a9ec2; }
+        </style>
+      </head>
+      <body>${decodedHtml}</body>
+      </html>
+    `;
+    
+    const encodedHtml = btoa(unescape(encodeURIComponent(sandboxHtml)));
+    
+    return `<iframe 
+      id="${iframeId}"
+      class="html-sandbox-frame"
+      sandbox="allow-scripts allow-forms"
+      style="width: 100%; min-height: 100px; border: 1px solid #4a4a6a; border-radius: 8px; background: #1a1a2e; margin: 8px 0;"
+      src="data:text/html;base64,${encodedHtml}"
+      onload="this.style.height = this.contentWindow.document.body.scrollHeight + 24 + 'px';"
+    ></iframe>`;
+  });
+}
+
+function convertReactComponent(content) {
+  // Match <react-component>...</react-component> tags
+  const reactRegex = /<react-component>([\s\S]*?)<\/react-component>/gi;
+  
+  return content.replace(reactRegex, (match, jsxContent) => {
+    // Decode HTML entities if content was escaped
+    const decodedJsx = jsxContent
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    
+    const iframeId = 'react-' + Math.random().toString(36).substr(2, 9);
+    
+    // Create React sandbox HTML
+    const reactHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+        <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <style>
+          * { box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 12px;
+            background: transparent;
+            color: #e0e0e0;
+          }
+          button {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 4px;
+          }
+          button:hover { background: #5a5a7a; }
+          input, select, textarea {
+            background: #2a2a4a;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 4px;
+          }
+          .error { color: #ff6b6b; padding: 12px; background: #2a1a1a; border-radius: 8px; }
+        </style>
+      </head>
+      <body>
+        <div id="root"></div>
+        <script type="text/babel">
+          try {
+            ${decodedJsx}
+            
+            // Auto-render if a component named App, Component, or the last function exists
+            const componentName = typeof App !== 'undefined' ? App : 
+                                  typeof Component !== 'undefined' ? Component : 
+                                  typeof Counter !== 'undefined' ? Counter :
+                                  typeof Main !== 'undefined' ? Main : null;
+            
+            if (componentName) {
+              const root = ReactDOM.createRoot(document.getElementById('root'));
+              root.render(React.createElement(componentName));
+            }
+          } catch (error) {
+            document.getElementById('root').innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+          }
+          
+          // Notify parent of content height
+          setTimeout(() => {
+            window.parent.postMessage({ type: 'resize', height: document.body.scrollHeight }, '*');
+          }, 100);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    const encodedHtml = btoa(unescape(encodeURIComponent(reactHtml)));
+    
+    return `<iframe 
+      id="${iframeId}"
+      class="react-component-frame"
+      sandbox="allow-scripts"
+      style="width: 100%; min-height: 120px; border: 1px solid #4a4a6a; border-radius: 8px; background: #1a1a2e; margin: 8px 0;"
+      src="data:text/html;base64,${encodedHtml}"
+      onload="
+        this.style.height = '150px';
+        const iframe = this;
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'resize') {
+            iframe.style.height = (e.data.height + 24) + 'px';
+          }
+        });
+      "
+    ></iframe>`;
+  });
+}
+
+function convertPrerenderedHtml(content) {
+  // Match <prerender>...</prerender> tags - renders HTML directly without sandbox
+  // Use with caution - only for trusted content
+  const prerenderRegex = /<prerender>([\s\S]*?)<\/prerender>/gi;
+  
+  return content.replace(prerenderRegex, (match, htmlContent) => {
+    // Decode HTML entities if content was escaped
+    const decodedHtml = htmlContent
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    
+    return `<div class="prerendered-content" style="margin: 8px 0; padding: 12px; background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px;">${decodedHtml}</div>`;
+  });
+}
+
 function convertHTML(str) {
   if (typeof str !== "string") str = JSON.stringify(str, null, 2);
 
   let result = escapeHTML(str);
+  // Convert media
   result = convertImageTags(result);
+  result = convertAudioTags(result);
+  result = convertVideoTags(result);
+  result = convertAudioFilePaths(result);
+  result = convertVideoFilePaths(result);
+  // Convert HTML/React components
+  result = convertHtmlSandbox(result);
+  result = convertReactComponent(result);
+  result = convertPrerenderedHtml(result);
+  // Convert paths
   result = convertPathsToLinks(result);
   return result;
 }
 
 function convertImgFilePaths(str) {
   return str.replace(/img:\/\//g, "/image_get?path=");
+}
+
+function convertAudioFilePaths(str) {
+  // Convert audio:// paths to playable audio elements
+  const audioPathRegex = /audio:\/\/([^\s<>"']+)/g;
+  return str.replace(audioPathRegex, (match, filePath) => {
+    const audioUrl = `/download_work_dir_file?path=${encodeURIComponent('/a0/' + filePath)}`;
+    return `<audio controls style="max-width: 100%; margin: 8px 0;"><source src="${audioUrl}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+  });
+}
+
+function convertVideoFilePaths(str) {
+  // Convert video:// paths to playable video elements
+  const videoPathRegex = /video:\/\/([^\s<>"']+)/g;
+  return str.replace(videoPathRegex, (match, filePath) => {
+    const videoUrl = `/download_work_dir_file?path=${encodeURIComponent('/a0/' + filePath)}`;
+    return `<video controls style="max-width: 100%; max-height: 400px; margin: 8px 0; border-radius: 8px;"><source src="${videoUrl}" type="video/mp4">Your browser does not support the video element.</video>`;
+  });
 }
 
 export function convertIcons(str) {

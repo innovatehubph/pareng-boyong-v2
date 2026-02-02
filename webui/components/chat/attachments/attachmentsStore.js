@@ -208,6 +208,20 @@ const model = {
     event.target.value = ""; // clear uploader selection to fix issue where same file is ignored the second time
   },
 
+  // Check if file is audio
+  isAudioFile(filename) {
+    const audioExtensions = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "wma"];
+    const extension = filename.split(".").pop().toLowerCase();
+    return audioExtensions.includes(extension);
+  },
+
+  // Check if file is video
+  isVideoFile(filename) {
+    const videoExtensions = ["mp4", "webm", "ogg", "mov", "avi", "mkv", "m4v"];
+    const extension = filename.split(".").pop().toLowerCase();
+    return videoExtensions.includes(extension);
+  },
+
   // File handling logic (moved from index.js)
   handleFiles(files) {
     console.log("handleFiles called with", files.length, "files");
@@ -217,10 +231,18 @@ const model = {
       const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp", "svg"].includes(
         ext
       );
+      const isAudio = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "wma"].includes(ext);
+      const isVideo = ["mp4", "webm", "ogg", "mov", "avi", "mkv", "m4v"].includes(ext);
+
+      // Determine file type
+      let fileType = "file";
+      if (isImage) fileType = "image";
+      else if (isAudio) fileType = "audio";
+      else if (isVideo) fileType = "video";
 
       const attachment = {
         file: file,
-        type: isImage ? "image" : "file",
+        type: fileType,
         name: file.name,
         extension: ext,
         displayInfo: this.getAttachmentDisplayInfo(file),
@@ -235,7 +257,7 @@ const model = {
         };
         reader.readAsDataURL(file);
       } else {
-        // For non-image files, add directly
+        // For non-image files (including audio/video), add directly
         this.addAttachment(attachment);
       }
     });
@@ -329,6 +351,21 @@ const model = {
       ppt: "document",
       pptx: "document",
       odp: "document",
+      // Audio files
+      mp3: "audio",
+      wav: "audio",
+      ogg: "audio",
+      m4a: "audio",
+      aac: "audio",
+      flac: "audio",
+      wma: "audio",
+      // Video files
+      mp4: "video",
+      webm: "video",
+      mov: "video",
+      avi: "video",
+      mkv: "video",
+      m4v: "video",
     };
     const type = types[extension] || "file";
     return `/public/${type}.svg`;
@@ -341,6 +378,8 @@ const model = {
       const filename = attachment;
       const extension = filename.split(".").pop();
       const isImage = this.isImageFile(filename);
+      const isAudio = this.isAudioFile(filename);
+      const isVideo = this.isVideoFile(filename);
       const previewUrl = isImage
         ? this.getServerImgUrl(filename)
         : this.getFilePreviewUrl(filename);
@@ -349,10 +388,15 @@ const model = {
         filename: filename,
         extension: extension.toUpperCase(),
         isImage: isImage,
+        isAudio: isAudio,
+        isVideo: isVideo,
         previewUrl: previewUrl,
         clickHandler: () => {
           if (this.isImageFile(filename)) {
             imageViewerStore.open(this.getServerImgUrl(filename), { name: filename });
+          } else if (this.isAudioFile(filename) || this.isVideoFile(filename)) {
+            // Open media in new tab or play inline
+            window.open(this.getServerFileUrl(filename), '_blank');
           } else {
             this.downloadAttachment(filename);
           }
@@ -361,6 +405,8 @@ const model = {
     } else {
       // attachment is object (from current session)
       const isImage = this.isImageFile(attachment.name);
+      const isAudio = this.isAudioFile(attachment.name);
+      const isVideo = this.isVideoFile(attachment.name);
       const filename = attachment.name;
       const extension = filename.split(".").pop() || "";
       const previewUrl = isImage
@@ -370,11 +416,16 @@ const model = {
         filename: filename,
         extension: extension.toUpperCase(),
         isImage: attachment.type === "image",
+        isAudio: attachment.type === "audio",
+        isVideo: attachment.type === "video",
         previewUrl: previewUrl,
         clickHandler: () => {
           if (attachment.type === "image") {
             const imageUrl = this.getServerImgUrl(attachment.name);
             imageViewerStore.open(imageUrl, { name: attachment.name });
+          } else if (attachment.type === "audio" || attachment.type === "video") {
+            // Open media in new tab or play inline
+            window.open(this.getServerFileUrl(attachment.name), '_blank');
           } else {
             this.downloadAttachment(attachment.name);
           }
