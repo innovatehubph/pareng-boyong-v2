@@ -109,50 +109,30 @@ async def get_valid_innovatehub_api_key() -> Optional[str]:
     return None
 
 
-def _add_cache_control(content: Any, cache: bool = True) -> Any:
+def _add_cache_control_to_system(system_blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Add cache_control to content blocks for prompt caching.
-    Caches system prompts and large static content to reduce token usage by up to 90%.
-    """
-    if not cache:
-        return content
+    Add cache_control to system blocks for prompt caching.
+    Caches system prompts to reduce token usage by up to 90%.
     
-    if isinstance(content, str):
-        # Convert string to cacheable block
-        return {
-            "type": "text",
-            "text": content,
-            "cache_control": {"type": "ephemeral"}
-        }
-    elif isinstance(content, dict):
-        # Add cache_control to existing block
-        content_copy = content.copy()
-        content_copy["cache_control"] = {"type": "ephemeral"}
-        return content_copy
-    elif isinstance(content, list):
-        # Cache the last block (Anthropic requirement: cache breakpoints at end)
-        if len(content) == 0:
-            return content
-        result = list(content)
-        # Add cache_control to last item
-        if isinstance(result[-1], dict):
-            result[-1] = result[-1].copy()
-            result[-1]["cache_control"] = {"type": "ephemeral"}
-        elif isinstance(result[-1], str):
-            result[-1] = {
-                "type": "text",
-                "text": result[-1],
-                "cache_control": {"type": "ephemeral"}
-            }
-        return result
-    return content
+    Note: Cache breakpoint must be at the end of the system array.
+    """
+    if not system_blocks:
+        return system_blocks
+    
+    result = [block.copy() for block in system_blocks]
+    # Add cache_control to last system block
+    if result:
+        result[-1]["cache_control"] = {"type": "ephemeral"}
+    return result
 
 
 def _prepare_messages_for_caching(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Prepare messages for prompt caching.
-    Adds cache_control to the last user message's content for context caching.
+    Adds cache_control to messages for context caching.
     This caches the conversation prefix, reducing tokens on follow-up messages.
+    
+    Note: Anthropic requires content to be a list when using cache_control.
     """
     if not messages:
         return messages
@@ -163,16 +143,29 @@ def _prepare_messages_for_caching(messages: List[Dict[str, Any]]) -> List[Dict[s
         
         # Cache system messages and early context (first 3 user messages)
         # Also cache any message with >1000 chars (large context)
+        content = msg_copy.get("content")
         should_cache = (
             msg.get("role") == "system" or
             (i < 6 and msg.get("role") == "user") or  # First 3 exchanges
-            (isinstance(msg.get("content"), str) and len(msg.get("content", "")) > 1000)
+            (isinstance(content, str) and len(content) > 1000)
         )
         
-        if should_cache:
-            content = msg_copy.get("content")
-            if content:
-                msg_copy["content"] = _add_cache_control(content)
+        if should_cache and content:
+            # Convert string content to list format with cache_control
+            if isinstance(content, str):
+                msg_copy["content"] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ]
+            elif isinstance(content, list):
+                # Already a list, add cache_control to last item
+                content_copy = [c.copy() if isinstance(c, dict) else c for c in content]
+                if content_copy and isinstance(content_copy[-1], dict):
+                    content_copy[-1]["cache_control"] = {"type": "ephemeral"}
+                msg_copy["content"] = content_copy
         
         result.append(msg_copy)
     
@@ -220,7 +213,7 @@ async def innovatehub_completion(
     
     # Add cache_control to system blocks (cache the system prompt)
     if enable_caching and system_blocks:
-        system_blocks = _add_cache_control(system_blocks)
+        system_blocks = _add_cache_control_to_system(system_blocks)
     
     # Prepare messages for caching
     cached_messages = _prepare_messages_for_caching(messages) if enable_caching else messages
@@ -312,7 +305,7 @@ async def innovatehub_stream(
     
     # Add cache_control to system blocks
     if enable_caching and system_blocks:
-        system_blocks = _add_cache_control(system_blocks)
+        system_blocks = _add_cache_control_to_system(system_blocks)
     
     # Prepare messages for caching
     cached_messages = _prepare_messages_for_caching(messages) if enable_caching else messages
