@@ -56,14 +56,32 @@ class VisionLoad(Tool):
         # build image data messages for LLMs, or error message
         content = []
         if self.images_dict:
+            # Check if using Anthropic model to use correct format
+            model_name = self.agent.config.chat_model.model_name.lower() if hasattr(self.agent.config, 'chat_model') else ""
+            is_anthropic = "claude" in model_name or "anthropic" in model_name
+            
             for path, image in self.images_dict.items():
                 if image:
-                    content.append(
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{image}"},
-                        }
-                    )
+                    if is_anthropic:
+                        # Anthropic format
+                        content.append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image,
+                                },
+                            }
+                        )
+                    else:
+                        # OpenAI format (default)
+                        content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{image}"},
+                            }
+                        )
                 else:
                     content.append(
                         {
