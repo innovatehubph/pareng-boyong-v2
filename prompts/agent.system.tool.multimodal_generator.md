@@ -5,17 +5,77 @@ Use this tool to analyze images, generate images from text, create videos, and a
 **Actions:**
 - `analyze_image` - Analyze/describe an image (Gemini)
 - `generate_image` - Create image from text (FLUX 2 Pro)
+- `edit_image` - Edit/transform image (Gemini 3 Pro / Nano Banana)
+- `vary_image` - Create variations (FLUX Redux)
 - `generate_video` - Create video from text (Seedance/Kling/Wan)
 - `add_audio` - Add audio/sound to video (MMAudio)
 - `models` - List available models
 
 ---
 
+## ⚠️ CRITICAL: PlataPay Content Workflow
+
+**AI models CANNOT perfectly reproduce:**
+- Specific logos (PlataPay, InnovateHub, etc.)
+- Text/captions in Filipino
+- App screens that look realistic
+
+### FOR PLATAPAY VIDEO ADS - Use `platapay_video_ads` tool!
+
+For PlataPay marketing videos, use the dedicated `platapay_video_ads` tool instead.
+It generates clean footage and uses Remotion for perfect branding.
+
+### FOR PLATAPAY IMAGES - Two-Step Workflow:
+
+**Step 1:** Generate background with `multimodal_generator`
+~~~json
+{
+    "thoughts": ["Need marketing image with PlataPay logo - generating background first"],
+    "tool_name": "multimodal_generator",
+    "tool_args": {
+        "action": "generate_image",
+        "prompt": "Professional fintech marketing banner, modern gradient, Filipino colors, clean area in top-left for logo placement, NO TEXT, NO LOGOS, 16:9"
+    }
+}
+~~~
+
+**Step 2:** Overlay REAL logo with `image_compositor`
+~~~json
+{
+    "thoughts": ["Now adding the real PlataPay logo"],
+    "tool_name": "image_compositor",
+    "tool_args": {
+        "action": "overlay",
+        "base_image": "<URL_from_step_1>",
+        "overlay_image": "/a0/tmp/platapay_logo.png",
+        "position": "top-left"
+    }
+}
+~~~
+
+---
+
+## ⚠️ CLEAN VIDEO PROMPTS (When using this tool for video)
+
+When generating videos that will have branding added later, ALWAYS include in prompt:
+- "NO text overlays"
+- "NO logos or brand marks"
+- "NO visible phone/tablet screens"
+- "Clean footage only"
+
+Example clean prompt:
+```
+Happy Filipino entrepreneur in sari-sari store, celebrating success.
+NO text overlays, NO logos, NO visible device screens.
+Clean footage only - text will be added in post-production.
+Warm lighting, natural movements, 5 seconds.
+```
+
+---
+
 ### Analyze an image:
 ~~~json
 {
-    "thoughts": ["User wants to know what's in this image"],
-    "headline": "Analyzing image content",
     "tool_name": "multimodal_generator",
     "tool_args": {
         "action": "analyze_image",
@@ -25,73 +85,41 @@ Use this tool to analyze images, generate images from text, create videos, and a
 }
 ~~~
 
-### Generate an image:
+### Generate an image (NO brand logos):
 ~~~json
 {
-    "thoughts": ["Creating an image from the user's description"],
-    "headline": "Generating image with FLUX 2 Pro",
     "tool_name": "multimodal_generator",
     "tool_args": {
         "action": "generate_image",
-        "prompt": "A futuristic cityscape at sunset with flying cars and neon lights, cyberpunk style, highly detailed",
+        "prompt": "A futuristic cityscape at sunset with flying cars",
         "aspect_ratio": "16:9"
     }
 }
 ~~~
 
-### Generate a video (normal quality - fast):
+### Generate CLEAN video (for later branding):
 ~~~json
 {
-    "thoughts": ["User wants a quick video, using normal quality"],
-    "headline": "Generating video with Wan 2.2",
+    "thoughts": ["Generating clean footage - branding will be added with Remotion"],
     "tool_name": "multimodal_generator",
     "tool_args": {
         "action": "generate_video",
-        "prompt": "A sports car driving along a beach at sunset, golden hour lighting",
-        "quality": "normal"
-    }
-}
-~~~
-
-### Generate a video (premium quality):
-~~~json
-{
-    "thoughts": ["User wants high quality video, using Seedance"],
-    "headline": "Generating premium video",
-    "tool_name": "multimodal_generator",
-    "tool_args": {
-        "action": "generate_video",
-        "prompt": "A young astronaut in a spacecraft cockpit, cinematic lighting, sci-fi atmosphere",
+        "prompt": "Happy Filipino person smiling warmly. NO text, NO logos, NO device screens. Clean footage only.",
         "quality": "premium"
     }
 }
 ~~~
 
-### Generate video from image (image-to-video):
-~~~json
-{
-    "thoughts": ["User has an image they want animated"],
-    "headline": "Creating video from image",
-    "tool_name": "multimodal_generator",
-    "tool_args": {
-        "action": "generate_video",
-        "prompt": "The person starts walking forward slowly",
-        "image_url": "https://example.com/photo.jpg",
-        "quality": "premium"
-    }
-}
-~~~
+Then use `remotion_branding` to add logo/text.
 
 ### Add audio to video:
 ~~~json
 {
-    "thoughts": ["User wants to add sound effects to their video"],
-    "headline": "Adding audio to video",
     "tool_name": "multimodal_generator",
     "tool_args": {
         "action": "add_audio",
         "video_url": "https://example.com/video.mp4",
-        "prompt": "ocean waves, seagulls, beach ambience"
+        "prompt": "upbeat music, positive mood"
     }
 }
 ~~~
@@ -99,12 +127,24 @@ Use this tool to analyze images, generate images from text, create videos, and a
 ---
 
 **Quality Levels for Video:**
-- `normal` - Wan 2.2 (fast, good for drafts)
-- `premium` - Seedance 1.5 Pro (best quality)
-- `premium_alt` - Kling v2.5 Turbo Pro (alternative premium)
+- `normal` - Wan 2.2 (fast)
+- `premium` - Seedance 1.5 Pro (best)
+- `premium_alt` - Kling v2.5 Turbo Pro
 
-**Aspect Ratios for Images:**
-- `1:1` (square)
-- `16:9` (landscape)
-- `9:16` (portrait/vertical)
-- `4:3`, `3:4`, `21:9`, etc.
+**Aspect Ratios:** `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `21:9`
+
+**Logo Files:**
+- **PlataPay:** `/a0/tmp/platapay_logo.png`
+
+---
+
+## Tool Routing for PlataPay:
+
+| Content Type | Tool |
+|-------------|------|
+| PlataPay **video** ad | `platapay_video_ads` |
+| PlataPay **image** ad | `empire_ad_generator` |
+| Add branding to video | `remotion_branding` |
+| Add logo to image | `image_compositor` |
+| General image (no brand) | `multimodal_generator` |
+| General video (no brand) | `multimodal_generator` |

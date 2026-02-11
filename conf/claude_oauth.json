@@ -1,0 +1,9 @@
+{
+  "access_token": "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",
+  "refresh_token": "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",
+  "expires_at": 1770748968.843,
+  "subscription_type": "max",
+  "rate_limit_tier": "default_claude_max_20x",
+  "source": "claude_cli",
+  "saved_at": 1770724223.2879794
+}

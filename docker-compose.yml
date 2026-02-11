@@ -1,0 +1,34 @@
+services:
+  pareng-boyong:
+    container_name: pareng-boyong
+    image: agent0ai/agent-zero:latest
+    volumes:
+      - /root/pareng-boyong-data:/a0
+      - /root/.config/clawdbot/google-service-account.json:/a0/google-service-account.json:ro
+      # VPS root access - full filesystem mounted at /vps
+      - /:/vps:rw
+      # Direct access to key directories for convenience
+      - /srv:/srv:rw
+      - /root/clawd:/clawd:rw
+      - /var/log:/var/log:ro
+    ports:
+      - "50002:80"
+    env_file:
+      - .env
+    environment:
+      # Ensure common names are set for compatibility
+      - OPENROUTER_API_KEY=${API_KEY_OPENROUTER}
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      # Claude Max Subscription
+      - API_KEY_ANTHROPIC=${API_KEY_ANTHROPIC}
+      # InnovateHub Claude Max (custom provider)
+      - API_KEY_INNOVATEHUB=${API_KEY_INNOVATEHUB}
+      - GOOGLE_APPLICATION_CREDENTIALS=/a0/google-service-account.json
+      # VPS access paths
+      - VPS_ROOT=/vps
+      - VPS_APPS=/srv
+      - VPS_CLAWD=/clawd
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

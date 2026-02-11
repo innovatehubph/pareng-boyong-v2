@@ -46,3 +46,12 @@ instruments/**
 # for browser-use
 agent_history.gif
 
+
+# Backup files (may contain secrets)
+*.bak*
+.env.bak*
+conf/claude_oauth.json
+conf/claude_oauth_state.json
+
+# Skills with hardcoded credentials
+skills/oauth-ai-tokens/antigravity-auth-server.js

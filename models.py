@@ -498,20 +498,63 @@ class LiteLLMChatWrapper(SimpleChatModel):
         while True:
             got_any_chunk = False
             try:
-                # call model
-                _completion = await acompletion(
-                    model=self.model_name,
-                    messages=msgs_conv,
-                    stream=stream,
-                    **call_kwargs,
-                )
+                # Check if using InnovateHub provider (custom OAuth handling)
+                if self.a0_model_conf and self.a0_model_conf.provider == "innovatehub":
+                    from python.helpers.innovatehub_claude import innovatehub_stream, innovatehub_completion
+                    
+                    # Extract model name without provider prefix
+                    model_only = self.model_name.split("/")[-1] if "/" in self.model_name else self.model_name
+                    
+                    # Convert messages to Anthropic format
+                    anthropic_messages = []
+                    system_prompt = None
+                    for msg in msgs_conv:
+                        if msg.get("role") == "system":
+                            system_prompt = msg.get("content", "")
+                        else:
+                            anthropic_messages.append({
+                                "role": msg.get("role", "user"),
+                                "content": msg.get("content", "")
+                            })
+                    
+                    if stream:
+                        _completion = innovatehub_stream(
+                            messages=anthropic_messages,
+                            model=model_only,
+                            system=system_prompt,
+                            max_tokens=call_kwargs.get("max_tokens", 8192),
+                            temperature=call_kwargs.get("temperature", 0.7),
+                        )
+                    else:
+                        _completion = await innovatehub_completion(
+                            messages=anthropic_messages,
+                            model=model_only,
+                            system=system_prompt,
+                            max_tokens=call_kwargs.get("max_tokens", 8192),
+                            temperature=call_kwargs.get("temperature", 0.7),
+                        )
+                else:
+                    # Standard litellm call
+                    _completion = await acompletion(
+                        model=self.model_name,
+                        messages=msgs_conv,
+                        stream=stream,
+                        **call_kwargs,
+                    )
 
                 if stream:
+                    # Check if this is InnovateHub (Anthropic format)
+                    is_innovatehub = self.a0_model_conf and self.a0_model_conf.provider == "innovatehub"
+                    
                     # iterate over chunks
                     async for chunk in _completion:  # type: ignore
                         got_any_chunk = True
-                        # parse chunk
-                        parsed = _parse_chunk(chunk)
+                        
+                        # Parse chunk - use Anthropic format for InnovateHub
+                        if is_innovatehub:
+                            parsed = _parse_anthropic_chunk(chunk)
+                        else:
+                            parsed = _parse_chunk(chunk)
                         output = result.add_chunk(parsed)
 
                         # collect reasoning delta and call callbacks
@@ -541,7 +584,11 @@ class LiteLLMChatWrapper(SimpleChatModel):
 
                 # non-stream response
                 else:
-                    parsed = _parse_chunk(_completion)
+                    # Use Anthropic format for InnovateHub
+                    if self.a0_model_conf and self.a0_model_conf.provider == "innovatehub":
+                        parsed = _parse_anthropic_response(_completion)
+                    else:
+                        parsed = _parse_chunk(_completion)
                     output = result.add_chunk(parsed)
                     if limiter:
                         if output["response_delta"]:
@@ -622,16 +669,66 @@ class BrowserCompatibleChatWrapper(ChatOpenRouter):
             model = kwargs.pop("model", None)
             kwrgs = {**self._wrapper.kwargs, **kwargs}
 
-            # hack from browser-use to fix json schema for gemini (additionalProperties, $defs, $ref)
-            if "response_format" in kwrgs and "json_schema" in kwrgs["response_format"] and model.startswith("gemini/"):
-                kwrgs["response_format"]["json_schema"] = ChatGoogle("")._fix_gemini_schema(kwrgs["response_format"]["json_schema"])
+            # Check if using InnovateHub provider
+            if self._wrapper.a0_model_conf and self._wrapper.a0_model_conf.provider == "innovatehub":
+                from python.helpers.innovatehub_claude import innovatehub_completion
+                
+                # Convert messages to Anthropic format
+                anthropic_messages = []
+                system_prompt = None
+                for msg in messages:
+                    role = getattr(msg, 'type', 'user')
+                    content = getattr(msg, 'content', str(msg))
+                    if role == 'system':
+                        system_prompt = content
+                    else:
+                        anthropic_messages.append({
+                            "role": "user" if role == "human" else role,
+                            "content": content
+                        })
+                
+                # Extract model name
+                model_only = self._wrapper.model_name.split("/")[-1] if "/" in self._wrapper.model_name else self._wrapper.model_name
+                
+                # Call InnovateHub Claude
+                anthropic_resp = await innovatehub_completion(
+                    messages=anthropic_messages,
+                    model=model_only,
+                    system=system_prompt,
+                    max_tokens=kwrgs.get("max_tokens", 8192),
+                    temperature=kwrgs.get("temperature", 0.7),
+                )
+                
+                # Convert to litellm-compatible response format
+                response_text = anthropic_resp.get("content", [{}])[0].get("text", "")
+                
+                # Create a mock response object
+                class MockMessage:
+                    def __init__(self, content):
+                        self.content = content
+                        self.tool_calls = None
+                
+                class MockChoice:
+                    def __init__(self, content):
+                        self.message = MockMessage(content)
+                        self.finish_reason = "stop"
+                
+                class MockResponse:
+                    def __init__(self, content):
+                        self.choices = [MockChoice(content)]
+                
+                resp = MockResponse(response_text)
+            else:
+                # hack from browser-use to fix json schema for gemini (additionalProperties, $defs, $ref)
+                if "response_format" in kwrgs and "json_schema" in kwrgs["response_format"] and model and model.startswith("gemini/"):
+                    kwrgs["response_format"]["json_schema"] = ChatGoogle("")._fix_gemini_schema(kwrgs["response_format"]["json_schema"])
 
-            resp = await acompletion(
-                model=self._wrapper.model_name,
-                messages=messages,
-                stop=stop,
-                **kwrgs,
-            )
+                resp = await acompletion(
+                    model=self._wrapper.model_name,
+                    messages=messages,
+                    stop=stop,
+                    **kwrgs,
+                )
 
             # Gemini: strip triple backticks and conform schema
             try:
@@ -826,6 +923,40 @@ def _parse_chunk(chunk: Any) -> ChatChunk:
 
     return ChatChunk(reasoning_delta=reasoning_delta, response_delta=response_delta)
 
+
+def _parse_anthropic_chunk(chunk: Any) -> ChatChunk:
+    """Parse Anthropic streaming chunk format"""
+    response_delta = ""
+    reasoning_delta = ""
+    
+    event_type = chunk.get("type", "")
+    
+    if event_type == "content_block_delta":
+        delta = chunk.get("delta", {})
+        delta_type = delta.get("type", "")
+        
+        if delta_type == "text_delta":
+            response_delta = delta.get("text", "")
+        elif delta_type == "thinking_delta":
+            reasoning_delta = delta.get("thinking", "")
+    
+    return ChatChunk(reasoning_delta=reasoning_delta, response_delta=response_delta)
+
+
+def _parse_anthropic_response(response: Any) -> ChatChunk:
+    """Parse Anthropic non-streaming response format"""
+    response_text = ""
+    reasoning_text = ""
+    
+    content = response.get("content", [])
+    for block in content:
+        block_type = block.get("type", "")
+        if block_type == "text":
+            response_text += block.get("text", "")
+        elif block_type == "thinking":
+            reasoning_text += block.get("thinking", "")
+    
+    return ChatChunk(reasoning_delta=response_text, response_delta=response_text)
 
 
 def _adjust_call_args(provider_name: str, model_name: str, kwargs: dict):

@@ -1219,6 +1219,28 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "external",
     }
 
+    # InnovateHub Claude Max section
+    innovatehub_claude_fields: list[SettingsField] = []
+
+    innovatehub_claude_fields.append(
+        {
+            "id": "innovatehub_claude_oauth",
+            "title": "Claude Max Authentication",
+            "description": "Connect your Claude Max subscription for unlimited API access through InnovateHub.",
+            "type": "button",
+            "value": "🔑 Connect / Re-login",
+        }
+    )
+
+    innovatehub_claude_section: SettingsSection = {
+        "id": "innovatehub_claude",
+        "title": "InnovateHub Claude Max",
+        "description": "Connect your Claude Max subscription to use Claude API through InnovateHub. "
+                       "This provides unlimited access using your existing Claude Pro/Max subscription.",
+        "fields": innovatehub_claude_fields,
+        "tab": "external",
+    }
+
     # update checker section
     update_checker_fields: list[SettingsField] = []
 
@@ -1292,6 +1314,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             mcp_server_section,
             a2a_section,
             external_api_section,
+            innovatehub_claude_section,
             update_checker_section,
             backup_section,
             dev_section,

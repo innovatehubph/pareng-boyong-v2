@@ -1,0 +1,578 @@
+<html>
+
+<head>
+    <title>InnovateHub Claude Max</title>
+</head>
+
+<body>
+    <div x-data="claudeTokenSettings()" x-init="checkStatus(true)">
+        
+        <!-- Status Section -->
+        <h3>Connection Status
+            <button class="btn slim" style="margin-left: 0.5em;" 
+                @click="checkStatus(false)" :disabled="loading">Refresh</button>
+        </h3>
+        
+        <div class="status-container">
+            <div class="status-row">
+                <div class="status-dot">
+                    <svg viewBox="0 0 16 16" width="12" height="12">
+                        <circle cx="8" cy="8" r="6" 
+                            x-bind:fill="status.authenticated ? '#00c340' : 'none'" 
+                            x-bind:opacity="status.authenticated ? 1 : 0" />
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="#e40138" stroke-width="2"
+                            x-bind:opacity="status.authenticated ? 0 : 1" />
+                    </svg>
+                </div>
+                <span class="status-label" x-text="status.authenticated ? 'Connected' : 'Not Connected'"></span>
+                <span class="status-info" x-show="status.authenticated">
+                    Token: <code x-text="status.token_preview"></code> · 
+                    Source: <span x-text="status.source"></span> · 
+                    Age: <span x-text="status.age_hours + 'h'"></span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Setup Section (when not authenticated or re-auth) -->
+        <template x-if="!status.authenticated || authFlow.active">
+            <div>
+                <h3>Setup Authentication</h3>
+                
+                <!-- Not started yet -->
+                <div x-show="!authFlow.active" class="setup-section">
+                    <p style="color: var(--color-text-secondary); margin-bottom: 1em;">
+                        Click the button below to start the authentication process. 
+                        A login window will open for you to authenticate with Claude.
+                    </p>
+                    <button class="btn slim primary" @click="startAuth()" :disabled="loading">
+                        <span x-show="loading" class="spinner"></span>
+                        <span x-show="!loading">Connect with Claude</span>
+                    </button>
+                    
+                    <div style="margin-top: 1.5em; padding-top: 1em; border-top: 1px solid var(--color-border);">
+                        <p style="color: var(--color-text-secondary); font-size: 0.9em; margin-bottom: 0.5em;">
+                            Or paste a token manually if you already have one:
+                        </p>
+                        <div class="manual-input-row">
+                            <input type="text" class="text-input" 
+                                x-model="manualTokenInput" 
+                                placeholder="Paste token here..."
+                                :disabled="loading">
+                            <button class="btn slim" @click="saveManualToken()" 
+                                :disabled="loading || !manualTokenInput.trim()">Save Token</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Auth flow in progress -->
+                <div x-show="authFlow.active" class="setup-section">
+                    <div class="auth-progress">
+                        <!-- Step 1: Generating URL -->
+                        <div class="progress-step" :class="{'active': authFlow.step === 1, 'completed': authFlow.step > 1}">
+                            <div class="step-indicator">
+                                <span x-show="authFlow.step === 1" class="spinner-small"></span>
+                                <span x-show="authFlow.step > 1">✓</span>
+                                <span x-show="authFlow.step < 1">1</span>
+                            </div>
+                            <div class="step-content">
+                                <span class="step-title">Generating authentication URL</span>
+                                <span class="step-status" x-show="authFlow.step === 1">Please wait...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2: Open Login Window -->
+                        <div class="progress-step" :class="{'active': authFlow.step === 2, 'completed': authFlow.step > 2}">
+                            <div class="step-indicator">
+                                <span x-show="authFlow.step > 2">✓</span>
+                                <span x-show="authFlow.step <= 2">2</span>
+                            </div>
+                            <div class="step-content">
+                                <span class="step-title">Open login window</span>
+                                <div x-show="authFlow.step === 2" style="margin-top: 0.5em;">
+                                    <p style="font-size: 0.85em; color: var(--color-text-secondary); margin-bottom: 0.5em;">
+                                        Click below to open Claude login in a new tab. Complete the login, then copy your token.
+                                    </p>
+                                    <button class="btn slim primary" @click="openAuthWindow()">
+                                        Open Login Window
+                                    </button>
+                                    <button class="btn slim" style="margin-left: 0.5em;" @click="advanceToTokenEntry()">
+                                        I've logged in
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3: Enter Token -->
+                        <div class="progress-step" :class="{'active': authFlow.step === 3}">
+                            <div class="step-indicator">3</div>
+                            <div class="step-content">
+                                <span class="step-title">Enter your token</span>
+                                <div x-show="authFlow.step === 3" style="margin-top: 0.5em;">
+                                    <p style="font-size: 0.85em; color: var(--color-text-secondary); margin-bottom: 0.5em;">
+                                        After logging in, copy the token displayed and paste it below:
+                                    </p>
+                                    <div class="token-input-row">
+                                        <textarea class="text-input token-textarea" 
+                                            x-model="tokenInput"
+                                            placeholder="Paste your token here..."
+                                            :disabled="loading"></textarea>
+                                    </div>
+                                    <div style="margin-top: 0.5em; display: flex; gap: 0.5em;">
+                                        <button class="btn slim primary" @click="completeAuth()" 
+                                            :disabled="loading || !tokenInput.trim()">
+                                            <span x-show="loading" class="spinner-small"></span>
+                                            <span x-show="!loading">Complete Setup</span>
+                                        </button>
+                                        <button class="btn slim" @click="cancelAuth()" :disabled="loading">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Actions (when authenticated) -->
+        <template x-if="status.authenticated && !authFlow.active">
+            <div>
+                <h3>Actions</h3>
+                <div style="display: flex; gap: 0.5em; flex-wrap: wrap;">
+                    <button class="btn slim" @click="startAuth()">Re-authenticate</button>
+                    <button class="btn slim danger" @click="disconnect()" :disabled="loading">Disconnect</button>
+                </div>
+            </div>
+        </template>
+
+        <!-- Messages -->
+        <div x-show="error" class="message-box error" style="margin-top: 1em;">
+            <span x-text="error"></span>
+            <button class="btn slim" style="margin-left: 0.5em;" @click="error = ''">×</button>
+        </div>
+        
+        <div x-show="successMsg" class="message-box success" style="margin-top: 1em;">
+            <span x-text="successMsg"></span>
+        </div>
+
+    </div>
+
+    <style>
+        .status-container {
+            margin-bottom: 1.5em;
+        }
+        
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.8em;
+            padding: 0.7em 1em;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-secondary);
+        }
+        
+        .status-dot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status-label {
+            font-weight: 600;
+            min-width: 8em;
+        }
+        
+        .status-info {
+            color: var(--color-text-secondary);
+            font-size: 0.9em;
+        }
+        
+        .status-info code {
+            background: var(--color-bg-primary);
+            padding: 0.1em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        
+        .setup-section {
+            padding: 1em;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-secondary);
+        }
+        
+        .auth-progress {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8em;
+        }
+        
+        .progress-step {
+            display: flex;
+            gap: 1em;
+            padding: 0.8em;
+            border-radius: 4px;
+            opacity: 0.4;
+            transition: all 0.3s ease;
+        }
+        
+        .progress-step.active {
+            opacity: 1;
+            background: var(--color-bg-primary);
+            border: 1px solid var(--color-border);
+        }
+        
+        .progress-step.completed {
+            opacity: 0.7;
+        }
+        
+        .progress-step.completed .step-indicator {
+            background: #00c340;
+            color: white;
+        }
+        
+        .step-indicator {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-border);
+            color: var(--color-text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        
+        .progress-step.active .step-indicator {
+            background: #0066cc;
+            color: white;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: 600;
+            display: block;
+        }
+        
+        .step-status {
+            font-size: 0.85em;
+            color: var(--color-text-secondary);
+        }
+        
+        .manual-input-row {
+            display: flex;
+            gap: 0.5em;
+        }
+        
+        .text-input {
+            flex: 1;
+            padding: 0.5em 0.8em;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            font-family: inherit;
+            font-size: 0.9em;
+        }
+        
+        .text-input:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+        
+        .token-input-row {
+            width: 100%;
+        }
+        
+        .token-textarea {
+            width: 100%;
+            min-height: 4em;
+            resize: vertical;
+            font-family: monospace;
+        }
+        
+        .message-box {
+            padding: 0.7em 1em;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .message-box.error {
+            background: rgba(228, 1, 56, 0.1);
+            border: 1px solid #e40138;
+            color: #e40138;
+        }
+        
+        .message-box.success {
+            background: rgba(0, 195, 64, 0.1);
+            border: 1px solid #00c340;
+            color: #00c340;
+        }
+        
+        .btn.danger {
+            color: #e40138;
+            border-color: #e40138;
+        }
+        
+        .btn.danger:hover {
+            background: rgba(228, 1, 56, 0.1);
+        }
+        
+        /* Spinner animation */
+        .spinner, .spinner-small {
+            display: inline-block;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            margin-right: 0.5em;
+        }
+        
+        .spinner-small {
+            width: 12px;
+            height: 12px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+    // Register Alpine data immediately (component loads after Alpine init)
+    Alpine.data('claudeTokenSettings', () => ({
+        status: {
+            authenticated: false,
+            token_preview: '',
+            source: '',
+            age_hours: 0
+        },
+        authFlow: {
+            active: false,
+            step: 0,
+            authUrl: null
+        },
+        loading: false,
+        error: '',
+        successMsg: '',
+        tokenInput: '',
+        manualTokenInput: '',
+
+        async checkStatus(silent = false) {
+            this.loading = true;
+            if (!silent) this.error = '';
+            try {
+                const response = await fetch('/claude_oauth?action=status', {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.data) {
+                    this.status = {
+                        authenticated: data.data.authenticated || false,
+                        token_preview: data.data.token_preview || '',
+                        source: data.data.source || '',
+                        age_hours: data.data.age_hours || 0
+                    };
+                }
+            } catch (e) {
+                if (!silent) {
+                    this.error = 'Failed to check status: ' + e.message;
+                }
+                console.log('Status check error:', e.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async startAuth() {
+            this.loading = true;
+            this.error = '';
+            this.tokenInput = '';
+            
+            // Start the flow - show step 1
+            this.authFlow = {
+                active: true,
+                step: 1,
+                authUrl: null
+            };
+            
+            try {
+                const response = await fetch('/claude_oauth', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'start_auth' })
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    this.error = data.data?.message || data.message || 'Failed to start authentication';
+                    this.authFlow.active = false;
+                    return;
+                }
+                
+                // Got the auth URL - move to step 2
+                this.authFlow.authUrl = data.data.auth_url;
+                this.authFlow.step = 2;
+                
+                // Auto-open the window after a brief delay
+                setTimeout(() => {
+                    this.openAuthWindow();
+                }, 500);
+                
+            } catch (e) {
+                this.error = 'Failed to start authentication: ' + e.message;
+                this.authFlow.active = false;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        openAuthWindow() {
+            if (!this.authFlow.authUrl) {
+                this.error = 'No authentication URL available';
+                return;
+            }
+            
+            // Open in a new tab
+            window.open(this.authFlow.authUrl, '_blank');
+        },
+
+        advanceToTokenEntry() {
+            this.authFlow.step = 3;
+        },
+
+        async completeAuth() {
+            if (!this.tokenInput.trim()) {
+                this.error = 'Please enter a token';
+                return;
+            }
+            
+            this.loading = true;
+            this.error = '';
+            
+            try {
+                const response = await fetch('/claude_oauth', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_token',
+                        token: this.tokenInput.trim()
+                    })
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    this.error = data.data?.message || data.message || 'Failed to save token';
+                } else {
+                    this.successMsg = 'Successfully connected to Claude Max!';
+                    this.resetAuthFlow();
+                    setTimeout(() => this.successMsg = '', 5000);
+                    await this.checkStatus(true);
+                }
+            } catch (e) {
+                this.error = 'Failed to save token: ' + e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async saveManualToken() {
+            if (!this.manualTokenInput.trim()) {
+                this.error = 'Please enter a token';
+                return;
+            }
+            
+            this.loading = true;
+            this.error = '';
+            
+            try {
+                const response = await fetch('/claude_oauth', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_token',
+                        token: this.manualTokenInput.trim()
+                    })
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    this.error = data.data?.message || data.message || 'Failed to save token';
+                } else {
+                    this.successMsg = 'Token saved successfully!';
+                    this.manualTokenInput = '';
+                    setTimeout(() => this.successMsg = '', 3000);
+                    await this.checkStatus(true);
+                }
+            } catch (e) {
+                this.error = 'Failed to save token: ' + e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        cancelAuth() {
+            this.resetAuthFlow();
+        },
+
+        async disconnect() {
+            if (!confirm('Are you sure you want to disconnect from Claude Max?')) {
+                return;
+            }
+            
+            this.loading = true;
+            this.error = '';
+            
+            try {
+                const response = await fetch('/claude_oauth', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'disconnect' })
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    this.error = data.data?.message || data.message || 'Failed to disconnect';
+                } else {
+                    this.successMsg = 'Disconnected successfully';
+                    setTimeout(() => this.successMsg = '', 3000);
+                    await this.checkStatus(true);
+                }
+            } catch (e) {
+                this.error = 'Failed to disconnect: ' + e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        resetAuthFlow() {
+            this.authFlow = {
+                active: false,
+                step: 0,
+                authUrl: null
+            };
+            this.tokenInput = '';
+        }
+    }));
+    </script>
+</body>
+
+</html>
