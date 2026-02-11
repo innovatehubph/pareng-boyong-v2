@@ -2,6 +2,7 @@
 InnovateHub Claude SDK
 Custom Anthropic client for OAuth tokens (Claude Max subscription)
 Mimics Claude Code identity for OAuth authentication
+Includes prompt caching for 90% token reduction on repeated content
 """
 
 import os
@@ -16,11 +17,12 @@ CLAUDE_CODE_VERSION = "2.1.2"
 CLAUDE_CODE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
 
 # OAuth-specific headers mimicking Claude Code exactly
+# Added prompt-caching beta for token optimization
 OAUTH_HEADERS = {
     "accept": "application/json",
     "content-type": "application/json",
     "anthropic-dangerous-direct-browser-access": "true",
-    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14",
+    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14,prompt-caching-2024-07-31",
     "user-agent": f"claude-cli/{CLAUDE_CODE_VERSION} (external, cli)",
     "x-app": "cli",
     "anthropic-version": "2023-06-01"
@@ -107,6 +109,76 @@ async def get_valid_innovatehub_api_key() -> Optional[str]:
     return None
 
 
+def _add_cache_control(content: Any, cache: bool = True) -> Any:
+    """
+    Add cache_control to content blocks for prompt caching.
+    Caches system prompts and large static content to reduce token usage by up to 90%.
+    """
+    if not cache:
+        return content
+    
+    if isinstance(content, str):
+        # Convert string to cacheable block
+        return {
+            "type": "text",
+            "text": content,
+            "cache_control": {"type": "ephemeral"}
+        }
+    elif isinstance(content, dict):
+        # Add cache_control to existing block
+        content_copy = content.copy()
+        content_copy["cache_control"] = {"type": "ephemeral"}
+        return content_copy
+    elif isinstance(content, list):
+        # Cache the last block (Anthropic requirement: cache breakpoints at end)
+        if len(content) == 0:
+            return content
+        result = list(content)
+        # Add cache_control to last item
+        if isinstance(result[-1], dict):
+            result[-1] = result[-1].copy()
+            result[-1]["cache_control"] = {"type": "ephemeral"}
+        elif isinstance(result[-1], str):
+            result[-1] = {
+                "type": "text",
+                "text": result[-1],
+                "cache_control": {"type": "ephemeral"}
+            }
+        return result
+    return content
+
+
+def _prepare_messages_for_caching(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Prepare messages for prompt caching.
+    Adds cache_control to the last user message's content for context caching.
+    This caches the conversation prefix, reducing tokens on follow-up messages.
+    """
+    if not messages:
+        return messages
+    
+    result = []
+    for i, msg in enumerate(messages):
+        msg_copy = msg.copy()
+        
+        # Cache system messages and early context (first 3 user messages)
+        # Also cache any message with >1000 chars (large context)
+        should_cache = (
+            msg.get("role") == "system" or
+            (i < 6 and msg.get("role") == "user") or  # First 3 exchanges
+            (isinstance(msg.get("content"), str) and len(msg.get("content", "")) > 1000)
+        )
+        
+        if should_cache:
+            content = msg_copy.get("content")
+            if content:
+                msg_copy["content"] = _add_cache_control(content)
+        
+        result.append(msg_copy)
+    
+    return result
+
+
 async def innovatehub_completion(
     messages: List[Dict[str, Any]],
     model: str = "claude-sonnet-4-20250514",
@@ -115,12 +187,16 @@ async def innovatehub_completion(
     system: Optional[str] = None,
     stream: bool = False,
     tools: Optional[List[Dict]] = None,
+    enable_caching: bool = True,  # Enable prompt caching by default
     **kwargs
 ) -> Dict[str, Any]:
     """
     Make a completion request using InnovateHub Claude (OAuth token)
     Includes Claude Code identity for OAuth authentication
     Automatically handles token refresh if needed
+    
+    Prompt Caching: Enabled by default, reduces token usage by up to 90%
+    for repeated system prompts and context.
     """
     api_key = await get_valid_innovatehub_api_key()
     if not api_key:
@@ -135,24 +211,40 @@ async def innovatehub_completion(
         headers["x-api-key"] = api_key
     
     # Build system prompt with Claude Code identity (REQUIRED for OAuth)
+    # Apply cache_control to system prompts for caching
     system_blocks = [
         {"type": "text", "text": CLAUDE_CODE_SYSTEM}
     ]
     if system:
         system_blocks.append({"type": "text", "text": system})
     
+    # Add cache_control to system blocks (cache the system prompt)
+    if enable_caching and system_blocks:
+        system_blocks = _add_cache_control(system_blocks)
+    
+    # Prepare messages for caching
+    cached_messages = _prepare_messages_for_caching(messages) if enable_caching else messages
+    
     # Build request payload
     payload = {
         "model": model,
         "max_tokens": max_tokens,
-        "messages": messages,
+        "messages": cached_messages,
         "system": system_blocks,  # Array format with Claude Code identity
     }
     
     if temperature is not None:
         payload["temperature"] = temperature
     if tools:
-        payload["tools"] = tools
+        # Cache tools definition (usually static)
+        if enable_caching and tools:
+            tools_copy = list(tools)
+            if tools_copy:
+                tools_copy[-1] = tools_copy[-1].copy()
+                tools_copy[-1]["cache_control"] = {"type": "ephemeral"}
+            payload["tools"] = tools_copy
+        else:
+            payload["tools"] = tools
     if stream:
         payload["stream"] = True
         
@@ -167,7 +259,20 @@ async def innovatehub_completion(
         if response.status_code != 200:
             raise Exception(f"Anthropic API error {response.status_code}: {response.text}")
         
-        return response.json()
+        result = response.json()
+        
+        # Log cache performance if available
+        usage = result.get("usage", {})
+        cache_creation = usage.get("cache_creation_input_tokens", 0)
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        if cache_creation or cache_read:
+            # Cache stats available - log for monitoring
+            from python.helpers.print_style import PrintStyle
+            PrintStyle(font_color="cyan", padding=False).print(
+                f"💾 Cache: created={cache_creation}, read={cache_read} tokens"
+            )
+        
+        return result
 
 
 async def innovatehub_stream(
@@ -177,11 +282,15 @@ async def innovatehub_stream(
     temperature: float = 0.7,
     system: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
+    enable_caching: bool = True,  # Enable prompt caching by default
     **kwargs
 ) -> AsyncIterator[Dict[str, Any]]:
     """
     Stream a completion request using InnovateHub Claude (OAuth token)
     Automatically handles token refresh if needed
+    
+    Prompt Caching: Enabled by default, reduces token usage by up to 90%
+    for repeated system prompts and context.
     """
     api_key = await get_valid_innovatehub_api_key()
     if not api_key:
@@ -201,10 +310,17 @@ async def innovatehub_stream(
     if system:
         system_blocks.append({"type": "text", "text": system})
     
+    # Add cache_control to system blocks
+    if enable_caching and system_blocks:
+        system_blocks = _add_cache_control(system_blocks)
+    
+    # Prepare messages for caching
+    cached_messages = _prepare_messages_for_caching(messages) if enable_caching else messages
+    
     payload = {
         "model": model,
         "max_tokens": max_tokens,
-        "messages": messages,
+        "messages": cached_messages,
         "system": system_blocks,
         "stream": True,
     }
@@ -212,7 +328,14 @@ async def innovatehub_stream(
     if temperature is not None:
         payload["temperature"] = temperature
     if tools:
-        payload["tools"] = tools
+        if enable_caching and tools:
+            tools_copy = list(tools)
+            if tools_copy:
+                tools_copy[-1] = tools_copy[-1].copy()
+                tools_copy[-1]["cache_control"] = {"type": "ephemeral"}
+            payload["tools"] = tools_copy
+        else:
+            payload["tools"] = tools
     for k, v in kwargs.items():
         if k not in payload:
             payload[k] = v
@@ -231,6 +354,18 @@ async def innovatehub_stream(
                         break
                     try:
                         event = json.loads(data)
+                        
+                        # Log cache stats from message_start event
+                        if event.get("type") == "message_start":
+                            usage = event.get("message", {}).get("usage", {})
+                            cache_creation = usage.get("cache_creation_input_tokens", 0)
+                            cache_read = usage.get("cache_read_input_tokens", 0)
+                            if cache_creation or cache_read:
+                                from python.helpers.print_style import PrintStyle
+                                PrintStyle(font_color="cyan", padding=False).print(
+                                    f"💾 Cache: created={cache_creation}, read={cache_read} tokens"
+                                )
+                        
                         yield event
                     except json.JSONDecodeError:
                         continue
