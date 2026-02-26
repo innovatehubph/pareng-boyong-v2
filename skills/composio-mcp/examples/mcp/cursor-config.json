@@ -1,0 +1,106 @@
+{
+  "mcpServers": {
+    "composio": {
+      "url": "https://mcp.composio.dev/composio",
+      "headers": {
+        "X-API-KEY": "YOUR_COMPOSIO_API_KEY"
+      },
+      "_comment": "Replace YOUR_COMPOSIO_API_KEY with your actual Composio API key"
+    }
+  },
+  "_examples": {
+    "with_entity_id": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/composio",
+          "headers": {
+            "X-API-KEY": "ck_your_api_key",
+            "X-Entity-ID": "developer_123"
+          }
+        }
+      }
+    },
+    "session_based": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/session/sess_abc123xyz",
+          "headers": {
+            "Authorization": "Bearer session_token_here"
+          }
+        }
+      }
+    },
+    "with_github_and_filesystem": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/composio",
+          "headers": {
+            "X-API-KEY": "ck_your_api_key"
+          }
+        },
+        "github": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-github"],
+          "env": {
+            "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token"
+          }
+        },
+        "filesystem": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+        }
+      }
+    },
+    "dev_environment": {
+      "_description": "Full development environment with Composio + local tools",
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/composio",
+          "headers": {
+            "X-API-KEY": "ck_your_api_key"
+          }
+        },
+        "postgres": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-postgres"],
+          "env": {
+            "DATABASE_URL": "postgresql://user:pass@localhost:5432/dev"
+          }
+        },
+        "memory": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-memory"]
+        }
+      }
+    }
+  },
+  "_installation": {
+    "macos_linux": "~/.cursor/mcp.json",
+    "windows": "%USERPROFILE%\\.cursor\\mcp.json",
+    "steps": [
+      "1. Create ~/.cursor directory if it doesn't exist",
+      "2. Copy this file as mcp.json to ~/.cursor/",
+      "3. Replace YOUR_COMPOSIO_API_KEY with your actual API key",
+      "4. Remove _examples, _installation, and _comment keys",
+      "5. Open Cursor Settings (Cmd/Ctrl + ,)",
+      "6. Navigate to Features → MCP",
+      "7. Enable 'Use MCP Servers'",
+      "8. Restart Cursor"
+    ]
+  },
+  "_cursor_specific": {
+    "notes": [
+      "Cursor uses MCP for AI-assisted coding features",
+      "Composio enables direct integration with 250+ APIs from your editor",
+      "Common use cases: GitHub PRs, Jira tickets, Slack notifications, Linear issues",
+      "Tools are available in both Composer and inline chat"
+    ],
+    "recommended_apps": [
+      "github - Direct PR and issue management",
+      "linear - Issue tracking integration", 
+      "slack - Team notifications",
+      "notion - Documentation access",
+      "jira - Sprint and ticket management"
+    ]
+  }
+}

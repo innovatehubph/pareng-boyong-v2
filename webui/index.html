@@ -320,6 +320,39 @@
                                                     </select>
                                                 </template>
 
+                                                <!-- Model Picker field: searchable dropdown with live fetch -->
+                                                <template x-if="field.type === 'model_picker'">
+                                                    <div x-data="modelPicker(field)" class="model-picker-wrapper">
+                                                        <div class="model-picker-row">
+                                                            <input type="text"
+                                                                class="model-picker-input"
+                                                                x-model="search"
+                                                                @input="onType()"
+                                                                @focus="open = models.length > 0"
+                                                                @blur="delay(function(){ open = false; })"
+                                                                :placeholder="field.value || 'Search or type model name...'"
+                                                                :readonly="field.readonly === true">
+                                                            <button class="btn model-fetch-btn"
+                                                                @click="fetchModels()"
+                                                                :disabled="fetching || field.readonly === true"
+                                                                :title="fetchTitle">
+                                                                <span x-show="!fetching" style="font-size:16px">&#x27F3;</span>
+                                                                <span x-show="fetching" class="model-fetch-spin">&#x23F3;</span>
+                                                            </button>
+                                                        </div>
+                                                        <div class="model-picker-status" x-show="statusMsg" :class="statusClass" x-text="statusMsg"></div>
+                                                        <div class="model-picker-dropdown" x-show="open && filtered.length > 0" @mousedown.prevent>
+                                                            <div class="model-picker-hint" x-show="search.length > 0" x-text="filtered.length + ' match' + (filtered.length !== 1 ? 'es' : '')"></div>
+                                                            <template x-for="m in filtered" :key="m.id">
+                                                                <div class="model-picker-item" @click="selectModel(m)">
+                                                                    <span class="model-item-name" x-text="m.name || m.id"></span>
+                                                                    <span class="model-item-id" x-show="m.name && m.name !== m.id" x-text="m.id"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </template>
+
                                                 <!-- HTML field -->
                                                 <template x-if="field.type === 'html'">
                                                     <div :class="field.classes" x-html="field.value"></div>

@@ -1,0 +1,91 @@
+{
+  "name": "@openclaw/composio-mcp-skill",
+  "version": "1.0.0",
+  "description": "Composio MCP integration skill for OpenClaw - enables AI agents to use 250+ tools",
+  "main": "dist/composio-client.js",
+  "types": "dist/composio-client.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "example:basic": "npx ts-node examples/typescript/basic-agent.ts",
+    "example:mcp": "npx ts-node examples/typescript/mcp-integration.ts",
+    "example:claude": "npx ts-node examples/typescript/claude-agent.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "composio",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "openai",
+    "anthropic",
+    "claude",
+    "tools",
+    "automation",
+    "openclaw"
+  ],
+  "author": "OpenClaw",
+  "license": "MIT",
+  "dependencies": {
+    "@composio/core": "^0.5.0",
+    "@composio/openai-agents": "^0.5.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@types/node": "^22.0.0",
+    "ai": "^4.0.0",
+    "openai": "^4.77.0",
+    "typescript": "^5.7.0",
+    "ts-node": "^10.9.2",
+    "vitest": "^2.0.0",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0"
+  },
+  "peerDependencies": {
+    "openai": ">=4.0.0",
+    "@anthropic-ai/sdk": ">=0.30.0",
+    "ai": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/composio-client.d.ts",
+      "import": "./dist/composio-client.js",
+      "require": "./dist/composio-client.cjs"
+    },
+    "./client": {
+      "types": "./dist/composio-client.d.ts",
+      "import": "./dist/composio-client.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/composio-mcp-skill"
+  }
+}

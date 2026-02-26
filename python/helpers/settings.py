@@ -136,6 +136,7 @@ class SettingsField(TypedDict, total=False):
         "switch",
         "button",
         "html",
+        "model_picker",  # searchable dropdown with live API fetch
     ]
     value: Any
     min: float
@@ -143,6 +144,8 @@ class SettingsField(TypedDict, total=False):
     step: float
     hidden: bool
     options: list[FieldOption]
+    provider_field: str  # id of the linked provider <select> field
+    api_base_field: str  # id of the linked api_base field
     style: str
 
 
@@ -184,9 +187,11 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "chat_model_name",
             "title": "Chat model name",
-            "description": "Exact name of model from selected provider",
-            "type": "text",
+            "description": "Search or type model name. Click ⟳ to fetch models from provider (also validates API key).",
+            "type": "model_picker",
             "value": settings["chat_model_name"],
+            "provider_field": "chat_model_provider",
+            "api_base_field": "chat_model_api_base",
         }
     )
 
@@ -297,9 +302,11 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "util_model_name",
             "title": "Utility model name",
-            "description": "Exact name of model from selected provider",
-            "type": "text",
+            "description": "Search or type model name. Click ⟳ to fetch models from provider (also validates API key).",
+            "type": "model_picker",
             "value": settings["util_model_name"],
+            "provider_field": "util_model_provider",
+            "api_base_field": "util_model_api_base",
         }
     )
 
@@ -377,9 +384,11 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "embed_model_name",
             "title": "Embedding model name",
-            "description": "Exact name of model from selected provider",
-            "type": "text",
+            "description": "Search or type model name. Click ⟳ to fetch models from provider (also validates API key).",
+            "type": "model_picker",
             "value": settings["embed_model_name"],
+            "provider_field": "embed_model_provider",
+            "api_base_field": "embed_model_api_base",
         }
     )
 
@@ -447,9 +456,11 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "browser_model_name",
             "title": "Web Browser model name",
-            "description": "Exact name of model from selected provider",
-            "type": "text",
+            "description": "Search or type model name. Click ⟳ to fetch models from provider (also validates API key).",
+            "type": "model_picker",
             "value": settings["browser_model_name"],
+            "provider_field": "browser_model_provider",
+            "api_base_field": "browser_model_api_base",
         }
     )
 
@@ -1219,27 +1230,6 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "external",
     }
 
-    # InnovateHub Claude Max section
-    innovatehub_claude_fields: list[SettingsField] = []
-
-    innovatehub_claude_fields.append(
-        {
-            "id": "innovatehub_claude_oauth",
-            "title": "Claude Max Authentication",
-            "description": "Connect your Claude Max subscription for unlimited API access through InnovateHub.",
-            "type": "button",
-            "value": "🔑 Connect / Re-login",
-        }
-    )
-
-    innovatehub_claude_section: SettingsSection = {
-        "id": "innovatehub_claude",
-        "title": "InnovateHub Claude Max",
-        "description": "Connect your Claude Max subscription to use Claude API through InnovateHub. "
-                       "This provides unlimited access using your existing Claude Pro/Max subscription.",
-        "fields": innovatehub_claude_fields,
-        "tab": "external",
-    }
 
     # update checker section
     update_checker_fields: list[SettingsField] = []
@@ -1314,7 +1304,6 @@ def convert_out(settings: Settings) -> SettingsOutput:
             mcp_server_section,
             a2a_section,
             external_api_section,
-            innovatehub_claude_section,
             update_checker_section,
             backup_section,
             dev_section,

@@ -10,6 +10,51 @@ import json
 import httpx
 from typing import AsyncIterator, Optional, Dict, Any, List
 
+# TOKEN_TRACKER_HOOK_START
+# Injected by token-tracker skill for exact token usage logging
+def token_tracker_hook(usage_data, agent_name="pareng-boyong", model="", chat_id=""):
+    """Log token usage from API response or streaming capture.
+
+    Accepts two formats:
+    1. Direct dict from streaming capture: {input_tokens, output_tokens, cache_creation, cache_read, model}
+    2. Response metadata dict with nested usage: {usage: {input_tokens, ...}}
+    """
+    import json, os
+    from datetime import datetime, timezone
+    tracking_file = "/a0/tmp/token_tracking/usage_log.jsonl"
+    os.makedirs(os.path.dirname(tracking_file), exist_ok=True)
+    try:
+        # Handle both formats
+        if "input_tokens" in usage_data or "cache_creation" in usage_data:
+            # Direct format from streaming capture
+            usage = usage_data
+        else:
+            # Nested format from response metadata
+            usage = usage_data.get("usage", usage_data.get("token_usage", {}))
+            if not usage:
+                return
+
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent": agent_name,
+            "model": model or usage.get("model", "unknown"),
+            "chat_id": chat_id,
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
+            "cache_creation_tokens": usage.get("cache_creation", 0) or usage.get("cache_creation_input_tokens", 0),
+            "cache_read_tokens": usage.get("cache_read", 0) or usage.get("cache_read_input_tokens", 0),
+            "total_tokens": 0,
+            "source": "api_hook"
+        }
+        record["total_tokens"] = (record["input_tokens"] + record["output_tokens"] +
+                                   record["cache_creation_tokens"] + record["cache_read_tokens"])
+        with open(tracking_file, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception:
+        pass  # Never break the main pipeline
+# TOKEN_TRACKER_HOOK_END
+
+
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_CODE_VERSION = "2.1.2"
 
@@ -34,7 +79,7 @@ def is_oauth_token(api_key: str) -> bool:
     return "sk-ant-oat" in api_key
 
 
-def get_innovatehub_api_key() -> Optional[str]:
+def get_innovatehub_api_key_DISABLED() -> Optional[str]:
     """Get the InnovateHub API key from environment or OAuth storage"""
     import time
 
@@ -62,7 +107,7 @@ def get_innovatehub_api_key() -> Optional[str]:
     return None
 
 
-async def get_valid_innovatehub_api_key() -> Optional[str]:
+async def get_valid_innovatehub_api_key_DISABLED() -> Optional[str]:
     """
     Get a valid InnovateHub API key, attempting token refresh if needed.
     This should be used before making API calls.
@@ -126,31 +171,35 @@ def _add_cache_control_to_system(system_blocks: List[Dict[str, Any]]) -> List[Di
     return result
 
 
-def _prepare_messages_for_caching(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _prepare_messages_for_caching(messages: List[Dict[str, Any]], max_cache_blocks: int = 3) -> List[Dict[str, Any]]:
     """
     Prepare messages for prompt caching.
     Adds cache_control to messages for context caching.
     This caches the conversation prefix, reducing tokens on follow-up messages.
     
-    Note: Anthropic requires content to be a list when using cache_control.
+    Note: Anthropic allows max 4 cache_control blocks total.
+    We use 1 for system prompt, so max 3 for messages.
     """
     if not messages:
         return messages
     
     result = []
+    cache_blocks_used = 0
+    
     for i, msg in enumerate(messages):
         msg_copy = msg.copy()
         
-        # Cache system messages and early context (first 3 user messages)
-        # Also cache any message with >1000 chars (large context)
+        # Only cache if we haven't hit the limit
+        # Cache early user messages (first 2 exchanges only to stay under limit)
         content = msg_copy.get("content")
         should_cache = (
-            msg.get("role") == "system" or
-            (i < 6 and msg.get("role") == "user") or  # First 3 exchanges
-            (isinstance(content, str) and len(content) > 1000)
+            cache_blocks_used < max_cache_blocks and
+            i < 4 and  # Only first 2 exchanges (4 messages)
+            msg.get("role") == "user" and
+            content
         )
         
-        if should_cache and content:
+        if should_cache:
             # Convert string content to list format with cache_control
             if isinstance(content, str):
                 msg_copy["content"] = [
@@ -160,11 +209,13 @@ def _prepare_messages_for_caching(messages: List[Dict[str, Any]]) -> List[Dict[s
                         "cache_control": {"type": "ephemeral"}
                     }
                 ]
+                cache_blocks_used += 1
             elif isinstance(content, list):
                 # Already a list, add cache_control to last item
                 content_copy = [c.copy() if isinstance(c, dict) else c for c in content]
                 if content_copy and isinstance(content_copy[-1], dict):
                     content_copy[-1]["cache_control"] = {"type": "ephemeral"}
+                    cache_blocks_used += 1
                 msg_copy["content"] = content_copy
         
         result.append(msg_copy)
@@ -229,15 +280,9 @@ async def innovatehub_completion(
     if temperature is not None:
         payload["temperature"] = temperature
     if tools:
-        # Cache tools definition (usually static)
-        if enable_caching and tools:
-            tools_copy = list(tools)
-            if tools_copy:
-                tools_copy[-1] = tools_copy[-1].copy()
-                tools_copy[-1]["cache_control"] = {"type": "ephemeral"}
-            payload["tools"] = tools_copy
-        else:
-            payload["tools"] = tools
+        # Don't cache tools - we're already using cache blocks for system + messages
+        # Anthropic limit is 4 blocks total
+        payload["tools"] = tools
     if stream:
         payload["stream"] = True
         
@@ -321,14 +366,9 @@ async def innovatehub_stream(
     if temperature is not None:
         payload["temperature"] = temperature
     if tools:
-        if enable_caching and tools:
-            tools_copy = list(tools)
-            if tools_copy:
-                tools_copy[-1] = tools_copy[-1].copy()
-                tools_copy[-1]["cache_control"] = {"type": "ephemeral"}
-            payload["tools"] = tools_copy
-        else:
-            payload["tools"] = tools
+        # Don't cache tools - we're already using cache blocks for system + messages
+        # Anthropic limit is 4 blocks total
+        payload["tools"] = tools
     for k, v in kwargs.items():
         if k not in payload:
             payload[k] = v
@@ -362,3 +402,23 @@ async def innovatehub_stream(
                         yield event
                     except json.JSONDecodeError:
                         continue
+
+
+# ============================================================
+# PATCHED: Enforce environment variable priority (2026-02-24)
+# This fixes stale token issues from claude_oauth.json fallback
+# ============================================================
+
+def get_innovatehub_api_key() -> Optional[str]:
+    """Get API key - ENV VARS ONLY (no oauth.json fallback)"""
+    token = os.environ.get('API_KEY_INNOVATEHUB', '').strip()
+    if token and token not in ('', 'None'):
+        return token
+    token = os.environ.get('API_KEY_ANTHROPIC', '').strip()
+    if token and token not in ('', 'None'):
+        return token
+    return None
+
+async def get_valid_innovatehub_api_key() -> Optional[str]:
+    """Get valid API key - ENV VARS ONLY (no oauth.json fallback)"""
+    return get_innovatehub_api_key()

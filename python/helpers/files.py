@@ -544,3 +544,13 @@ def list_files_in_dir_recursively(relative_path: str) -> list[str]:
             result.append(rel_path)
     return result
     
+
+def find_existing_paths_by_pattern(pattern: str):
+    """Find all paths matching a glob pattern."""
+    if not pattern:
+        return []
+
+    search_pattern = get_abs_path(pattern)
+    matches = glob.glob(search_pattern, recursive=True)
+    matches.sort()
+    return matches

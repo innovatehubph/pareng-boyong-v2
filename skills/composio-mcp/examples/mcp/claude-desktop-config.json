@@ -1,0 +1,66 @@
+{
+  "mcpServers": {
+    "composio": {
+      "url": "https://mcp.composio.dev/composio",
+      "headers": {
+        "X-API-KEY": "YOUR_COMPOSIO_API_KEY"
+      },
+      "_comment": "Replace YOUR_COMPOSIO_API_KEY with your actual Composio API key"
+    }
+  },
+  "_examples": {
+    "with_entity_id": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/composio",
+          "headers": {
+            "X-API-KEY": "ck_your_api_key",
+            "X-Entity-ID": "user_123"
+          }
+        }
+      }
+    },
+    "session_based": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/session/sess_abc123xyz",
+          "headers": {
+            "Authorization": "Bearer session_token_here"
+          }
+        }
+      }
+    },
+    "multiple_servers": {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/composio",
+          "headers": {
+            "X-API-KEY": "ck_your_api_key"
+          }
+        },
+        "filesystem": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"]
+        },
+        "brave-search": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+          "env": {
+            "BRAVE_API_KEY": "your_brave_api_key"
+          }
+        }
+      }
+    }
+  },
+  "_installation": {
+    "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "windows": "%APPDATA%\\Claude\\claude_desktop_config.json",
+    "linux": "~/.config/Claude/claude_desktop_config.json",
+    "steps": [
+      "1. Copy this file to the appropriate location for your OS",
+      "2. Replace YOUR_COMPOSIO_API_KEY with your actual API key",
+      "3. Remove _examples, _installation, and _comment keys",
+      "4. Restart Claude Desktop"
+    ]
+  }
+}

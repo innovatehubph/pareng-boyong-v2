@@ -542,13 +542,30 @@ class LiteLLMChatWrapper(SimpleChatModel):
                         **call_kwargs,
                     )
 
+                # TOKEN TRACKER: init usage dict
+                _tt_usage = {}
                 if stream:
                     # Check if this is InnovateHub (Anthropic format)
                     is_innovatehub = self.a0_model_conf and self.a0_model_conf.provider == "innovatehub"
+
+
                     
                     # iterate over chunks
                     async for chunk in _completion:  # type: ignore
                         got_any_chunk = True
+                        # TOKEN TRACKER: capture usage from Anthropic stream events
+                        if is_innovatehub and isinstance(chunk, dict):
+                            _evt = chunk.get("type", "")
+                            if _evt == "message_start":
+                                _mu = chunk.get("message", {}).get("usage", {})
+                                _tt_usage["input_tokens"] = _mu.get("input_tokens", 0)
+                                _tt_usage["cache_creation"] = _mu.get("cache_creation_input_tokens", 0)
+                                _tt_usage["cache_read"] = _mu.get("cache_read_input_tokens", 0)
+                                _tt_usage["model"] = chunk.get("message", {}).get("model", "")
+                            elif _evt == "message_delta":
+                                _du = chunk.get("usage", {})
+                                _tt_usage["output_tokens"] = _du.get("output_tokens", 0)
+
                         
                         # Parse chunk - use Anthropic format for InnovateHub
                         if is_innovatehub:
@@ -597,6 +614,14 @@ class LiteLLMChatWrapper(SimpleChatModel):
                             limiter.add(output=approximate_tokens(output["reasoning_delta"]))
 
                 # Successful completion of stream
+                # TOKEN TRACKER: log usage after successful completion
+                if _tt_usage:
+                    try:
+                        from python.helpers.innovatehub_claude import token_tracker_hook
+                        token_tracker_hook(_tt_usage)
+                    except Exception:
+                        pass
+
                 return result.response, result.reasoning
 
             except Exception as e:

@@ -1,0 +1,17 @@
+{
+  "name": "antigravity-oauth-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Google Antigravity OAuth Server with paste-back flow",
+  "main": "antigravity-auth-server.js",
+  "scripts": {
+    "start": "node antigravity-auth-server.js",
+    "dev": "node --watch antigravity-auth-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

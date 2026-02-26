@@ -18,6 +18,7 @@ from python.helpers.print_style import PrintStyle
 # Claude OAuth configuration (from Claude Code)
 CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 CLAUDE_AUTH_URL = "https://claude.ai/oauth/authorize"
+CLAUDE_TOKEN_URL = "https://claude.ai/api/oauth/token"
 
 # Storage paths
 TOKEN_FILE = "conf/claude_oauth.json"
@@ -117,6 +118,74 @@ def delete_token() -> bool:
         return True
     except Exception:
         return False
+
+
+async def try_refresh_token() -> dict | None:
+    """
+    Attempt to refresh the OAuth token using the refresh token.
+    Returns the new token data if successful, None otherwise.
+    """
+    import httpx
+    
+    try:
+        token_data = load_token()
+        if not token_data:
+            return None
+        
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token:
+            PrintStyle.warning("No refresh token available")
+            return None
+        
+        PrintStyle.info("Attempting to refresh OAuth token...")
+        
+        # Build refresh request (same as Claude Code)
+        payload = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": CLAUDE_CLIENT_ID
+        }
+        
+        headers = {
+            "content-type": "application/json",
+            "accept": "application/json",
+            "user-agent": "claude-cli/2.1.2 (external, cli)",
+            "x-app": "cli"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(CLAUDE_TOKEN_URL, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                PrintStyle.error(f"Token refresh failed: {response.status_code} - {response.text}")
+                return None
+            
+            result = response.json()
+            
+            # Save new tokens
+            new_token_data = {
+                "access_token": result.get("access_token"),
+                "refresh_token": result.get("refresh_token", refresh_token),  # Keep old if not provided
+                "expires_at": time.time() + result.get("expires_in", 86400),
+                "subscription_type": token_data.get("subscription_type", "max"),
+                "rate_limit_tier": token_data.get("rate_limit_tier", "default_claude_max_20x"),
+                "source": "refresh",
+                "saved_at": time.time()
+            }
+            
+            files.write_file(get_token_path(), json.dumps(new_token_data, indent=2))
+            
+            # Update .env
+            env_path = files.get_abs_path(".env")
+            dotenv.set_dotenv_value("API_KEY_ANTHROPIC", new_token_data["access_token"], env_path)
+            dotenv.set_dotenv_value("API_KEY_INNOVATEHUB", new_token_data["access_token"], env_path)
+            
+            PrintStyle.success("OAuth token refreshed successfully!")
+            return new_token_data
+            
+    except Exception as e:
+        PrintStyle.error(f"Token refresh error: {e}")
+        return None
 
 
 def generate_auth_url() -> dict:

@@ -1,0 +1,39 @@
+# Composio MCP Python Examples - Requirements
+# Install with: pip install -r requirements.txt
+
+# Core Composio SDK
+composio>=0.6.0
+
+# Provider packages (install based on your use case)
+composio-openai-agents>=0.1.0  # For OpenAI Agents SDK integration
+# composio-langchain>=0.1.0    # For LangChain integration
+# composio-crewai>=0.1.0       # For CrewAI integration
+# composio-autogen>=0.1.0      # For AutoGen integration
+
+# HTTP client for direct API/MCP access
+httpx>=0.27.0
+
+# OpenAI Agents SDK (for basic_agent.py)
+openai-agents>=0.0.1
+
+# OpenAI SDK (for direct API usage)
+openai>=1.50.0
+
+# Standard utilities
+python-dotenv>=1.0.0
+
+# Async support
+anyio>=4.0.0
+httpx-sse>=0.4.0  # For SSE streaming
+
+# Type hints and validation
+pydantic>=2.0.0
+
+# Testing (optional)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# Development (optional)
+# black>=24.0.0
+# mypy>=1.8.0
+# ruff>=0.3.0

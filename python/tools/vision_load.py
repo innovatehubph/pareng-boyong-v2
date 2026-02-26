@@ -57,7 +57,7 @@ class VisionLoad(Tool):
         content = []
         if self.images_dict:
             # Check if using Anthropic model to use correct format
-            model_name = self.agent.config.chat_model.model_name.lower() if hasattr(self.agent.config, 'chat_model') else ""
+            model_name = self.agent.config.chat_model.name.lower() if hasattr(self.agent.config, 'chat_model') else ""
             is_anthropic = "claude" in model_name or "anthropic" in model_name
             
             for path, image in self.images_dict.items():

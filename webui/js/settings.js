@@ -283,9 +283,6 @@ const settingsModalProxy = {
             openModal("settings/external/api-examples.html");
         } else if (field.id === "memory_dashboard") {
             openModal("settings/memory/memory-dashboard.html");
-        } else if (field.id === "innovatehub_claude_oauth") {
-            openModal("settings/claude_oauth.html");
-        }
     }
 };
 
@@ -590,4 +587,127 @@ function showToast(message, type = 'info') {
         console.log(`SETTINGS ${type.toUpperCase()}: ${message}`);
         return null;
     }
+}
+
+// ─── Model Picker Alpine.js Component ──────────────────────────────────────────
+// Attached to any field with type === "model_picker"
+// Provides: searchable dropdown + live model fetch from /models_list API
+
+function modelPicker(field) {
+    return {
+        search: field.value || '',
+        models: [],
+        filtered: [],
+        open: false,
+        fetching: false,
+        statusMsg: '',
+        statusClass: '',
+
+        get fetchTitle() {
+            return this.fetching
+                ? 'Fetching models...'
+                : 'Fetch available models from this provider (also validates API key)';
+        },
+
+        delay(fn) {
+            setTimeout(fn, 200);
+        },
+
+        onType() {
+            const q = this.search.toLowerCase();
+            this.filtered = this.models.filter(m =>
+                m.id.toLowerCase().includes(q) ||
+                (m.name || '').toLowerCase().includes(q)
+            );
+            field.value = this.search;
+            this.open = this.filtered.length > 0;
+        },
+
+        selectModel(m) {
+            this.search = m.id;
+            field.value = m.id;
+            this.open = false;
+            this.statusMsg = '✓ ' + (m.name || m.id);
+            this.statusClass = 'status-ok';
+        },
+
+        // Walk the settings sections tree to find a field by id
+        _getFieldValue(fieldId) {
+            if (!fieldId) return '';
+            const modalEl = document.getElementById('settingsModal');
+            if (!modalEl) return '';
+            try {
+                const modalData = Alpine.$data(modalEl);
+                if (!modalData || !modalData.settings || !modalData.settings.sections) return '';
+                for (const section of modalData.settings.sections) {
+                    if (!section.fields) continue;
+                    for (const f of section.fields) {
+                        if (f.id === fieldId) return f.value || '';
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            return '';
+        },
+
+        async fetchModels() {
+            const provider = this._getFieldValue(field.provider_field);
+            if (!provider) {
+                this.statusMsg = '⚠ Select a provider first';
+                this.statusClass = 'status-warn';
+                return;
+            }
+
+            // Look up any api_key for this provider from Section 2 (api_keys)
+            const apiKeyFieldId = 'api_key_' + provider;
+            const apiKey = this._getFieldValue(apiKeyFieldId);
+            const apiBase = this._getFieldValue(field.api_base_field);
+
+            this.fetching = true;
+            this.statusMsg = '⏳ Fetching from ' + provider + '...';
+            this.statusClass = 'status-loading';
+            this.open = false;
+
+            try {
+                const resp = await sendJsonData('/models_list', {
+                    provider: provider,
+                    api_key: apiKey || '',
+                    api_base: apiBase || ''
+                });
+
+                if (resp.error && (!resp.models || resp.models.length === 0)) {
+                    this.statusMsg = '❌ ' + resp.error;
+                    this.statusClass = 'status-error';
+                    return;
+                }
+
+                this.models = resp.models || [];
+
+                // Filter to current search term
+                const q = this.search.toLowerCase();
+                this.filtered = q
+                    ? this.models.filter(m =>
+                        m.id.toLowerCase().includes(q) ||
+                        (m.name || '').toLowerCase().includes(q))
+                    : [...this.models];
+
+                const isInnovateHub = (provider === 'innovatehub');
+                const isFallback = resp.error || resp.fallback;
+                if (isInnovateHub && isFallback) {
+                    this.statusMsg = '⚠ ' + resp.count + ' models (fallback — token may need refresh, run /fresh)';
+                    this.statusClass = 'status-warn';
+                } else {
+                    this.statusMsg = '✅ ' + resp.count + ' models loaded';
+                    this.statusClass = 'status-ok';
+                }
+
+                this.open = this.filtered.length > 0;
+
+            } catch (e) {
+                this.statusMsg = '❌ ' + (e.message || 'Failed to fetch models');
+                this.statusClass = 'status-error';
+            } finally {
+                this.fetching = false;
+            }
+        }
+    };
 }
